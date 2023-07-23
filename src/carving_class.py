@@ -15,7 +15,7 @@ from selectinf.randomized.randomization import randomization
 from selectinf.base import selected_targets, full_targets
 from selectinf.base import restricted_estimator
 
-from core import sample_sov_reorder, Gibbs, joint_cdf_bivnormal, lower_bound, upper_bound_numerator, ci_bisection, st_cdf, sample_sov
+from src.core import sample_sov_reorder, Gibbs, joint_cdf_bivnormal, lower_bound, upper_bound_numerator, ci_bisection, st_cdf, sample_sov
 
 MACHINE_EPS = np.finfo(np.float64).eps
 
@@ -643,7 +643,7 @@ class gaussian_carving(random_lasso):
             self.beta_lasso = beta_lasso
             self.selected = selected
             self.model = model
-        elif target_d is not None:
+        elif target_d is not None and target_d > 0:
             lo = 0
             hi = lbd
             model_ = lasso.lasso(g, hi * self.n1)

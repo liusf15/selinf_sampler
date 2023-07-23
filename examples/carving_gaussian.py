@@ -3,23 +3,25 @@ import os
 import argparse
 import itertools
 import pickle
+import yaml
+import datetime
 import time
 import warnings
-from instances import gaussian_instance
-from carving.carving_class import gaussian_carving
+from examples.instances import gaussian_instance
+from src.carving_class import gaussian_carving
 
 MACHINE_EPS = np.finfo(np.float64).eps
 
-def run(seed, nsample, rho1, signal, equi, path, target_d=None, s=10, scale=False, sampling_only=False, deterministic=False):
-    n = 300
-    n1 = int(n * rho1)
-    ntune = 100
-    p = 300
-    if equi:
-        rho = .9
-    else:
-        rho = .9
-    X, Y, beta = gaussian_instance(n=n+ntune, p=p, s=s, signal=np.sqrt(2 * np.log(p) * signal), rho=rho, sigma=1., random_signs=True, seed=seed, scale=scale, equicorrelated=equi)
+def run(config):
+    seed = config['seed']
+    signal = config['signal']
+    n = config['n']
+    n1 = int(config['n'] * config['rho1'])
+    ntune = config['ntune']
+    p = config['p']
+    target_d = config['target_d']
+    rho = config['rho']
+    X, Y, beta = gaussian_instance(n=n+ntune, p=p, s=config['s'], signal=np.sqrt(2 * np.log(p) * signal), rho=rho, sigma=1., random_signs=True, seed=seed, scale=True, equicorrelated=config['cov_x']=='equi')
     X_tune = X[n:]
     Y_tune = Y[n:]
     X = X[:n]
@@ -75,7 +77,7 @@ def run(seed, nsample, rho1, signal, equi, path, target_d=None, s=10, scale=Fals
     print("length", np.mean(exact_ci[:, 1] - exact_ci[:, 0]))
 
     # all IS
-    n_sov = nsample
+    n_sov = config['nsample']
     start = time.time()
     allIS_result = carving.sampling_inference(n_sov=n_sov, seed=seed**2)
     allIS_time = time.time() - start
@@ -85,23 +87,6 @@ def run(seed, nsample, rho1, signal, equi, path, target_d=None, s=10, scale=Fals
     print('allIS CI', allIS_result)
     print("length", np.mean(allIS_ci[:, 1] - allIS_ci[:, 0]))
 
-    # deterministic bound
-    deter_ci = np.zeros((d, 2))
-    deter_pval = np.zeros(d)
-    start = time.time()
-    if deterministic:
-        for j in range(d):
-            print(j)
-            eta = np.eye(d)[j]
-            params = carving.prepare_eta(eta)
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=RuntimeWarning)
-                deter_pval[j] = carving.get_pvalue_upper(params, 0., two_sided=True)
-                deter_ci[j] = carving.get_CI_deterministic(params, allIS_ci[j], sig_level=sig_level, two_sided=True)
-    deter_covered = (beta_target <= deter_ci[:, 1]) & (beta_target >= deter_ci[:, 0])
-    deter_time = time.time() - start
-    print("deterministic CI", deter_ci)
-    print("length", np.mean(deter_ci[:, 1] - deter_ci[:, 0]))
 
     # unbiased estimator
     E = carving.E
@@ -146,75 +131,51 @@ def run(seed, nsample, rho1, signal, equi, path, target_d=None, s=10, scale=Fals
     gibbs_covered = (beta_target <= gibbs_ci[:, 1]) * (beta_target >= gibbs_ci[:, 0])
     print('gibbs CI', gibbs_ci)
 
-    pvalues = np.stack([naive_pval, splitting_pval, mle_approx_pval, mle_sov_pval, exact_pval, allIS_pval, gibbs_pval, sov_pval, deter_pval])
-    ci = np.stack([naive_ci, splitting_ci, mle_approx_ci, mle_sov_ci, exact_ci, allIS_ci, gibbs_ci, sov_ci, deter_ci])
-    covered = np.stack([naive_covered, splitting_covered, mle_approx_covered, mle_sov_covered, exact_covered, allIS_covered, gibbs_covered, sov_covered, deter_covered])
+    pvalues = np.stack([naive_pval, splitting_pval, mle_approx_pval, mle_sov_pval, exact_pval, allIS_pval, gibbs_pval, sov_pval])
+    ci = np.stack([naive_ci, splitting_ci, mle_approx_ci, mle_sov_ci, exact_ci, allIS_ci, gibbs_ci, sov_ci])
+    covered = np.stack([naive_covered, splitting_covered, mle_approx_covered, mle_sov_covered, exact_covered, allIS_covered, gibbs_covered, sov_covered])
     print(np.mean(covered, 1))
 
-    times = np.stack([mle_approx_time, mle_sov_time, allIS_time, gibbs_time, sov_time, deter_time])
+    times = np.stack([mle_approx_time, mle_sov_time, allIS_time, gibbs_time, sov_time])
     print('times', times)
-    methods = ['naive', 'splitting', 'mle_approx', 'mle_sov', 'exact', 'allIS', 'gibbs', 'sov', 'deterministic']
+    methods = ['naive', 'splitting', 'mle_approx', 'mle_sov', 'exact', 'allIS', 'gibbs', 'sov']
     results = {'pvalue': pvalues, 'ci': ci, 'covered': covered, 'times': times, 'methods': methods}
-    # print(results)
+    print(results)
+
     
-    if equi:
-        xcov = 'equi'
-    else:
-        xcov = 'AR'
-    if target_d is not None:
-        filename = f'gaussian_mle_{n}_{n1}_{p}_s_{s}_targetd_{target_d}_{xcov}_rho_{rho}_signalfac_{signal}_nsample_{nsample}_{seed}'
-    else:
-        filename = f'gaussian_mle_{n}_{n1}_{p}_s_{s}_ntune_{ntune}_{xcov}_rho_{rho}_signalfac_{signal}_nsample_{nsample}_{seed}'
-    if sampling_only:
-        filename = filename + '_sampling.pkl'
-    else:
-        filename = filename + '.pkl'
-    
-    with open(os.path.join(path, filename), 'wb') as f:
+    with open(config['savename'], 'wb') as f:
         pickle.dump(results, f)
-        
+
     print("saving results to", filename)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('config', type=str)
     parser.add_argument('--jobid', type=int, default=0)
-    parser.add_argument('--target_d', type=int, default=-1)
-    parser.add_argument('--s', default=10, type=int)
-    parser.add_argument('--rho1', default=.8, type=float)
-    parser.add_argument('--equi', action='store_true', default=False)
-    parser.add_argument('--sampling_only', action='store_true', default=False)
-    parser.add_argument('--vary', default='signal', type=str)
-    parser.add_argument('--rootdir', default='')
     args = parser.parse_args()
+    with open(args.config) as f:
+        config = yaml.safe_load(f.read())
 
-    os.makedirs(os.path.join(args.rootdir, 'results/carving5'), exist_ok=True)
     l = 0
-    m_list = np.arange(9, 10)
     nrep = 200
-    target_d = args.target_d
-    if target_d < 0:
-        target_d = None
+    m = 9
+    nsample = 2**m
+    for signal, seed in itertools.product([.6, .9, 1.2], np.arange(nrep)):
+        if l == args.jobid:
+            print(signal, seed)
+            config['seed'] = seed
+            config['signal'] = signal
+            break
+        l = l + 1
     
-    if args.vary == 'signal':
-        m = 9
-        rho1 = 0.8
-        s = args.s
-        for signal, seed in itertools.product([.6, .9, 1.2], np.arange(nrep)):
-            if l == args.jobid:
-                nsample = 2**m
-                print(signal, rho1, nsample, seed)
-                break
-            l = l + 1
+    path = os.path.join(config['rootdir'], datetime.datetime.now().strftime("%Y_%m_%d"))
+    filename = f'carving_gaussian_{config["n"]}_{config["rho1"]}_{config["p"]}_s_{config["s"]}_targetd_{config["target_d"]}_{config["cov_x"]}_rho_{config["rho"]}_nsample_{nsample}_signalfac_{signal}'
+    path = os.path.join(path, filename)
+    os.makedirs(path, exist_ok=True)
+    with open(os.path.join(path, 'config.yaml'), 'w', encoding='utf8') as f:
+        yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+    config['savename'] = os.path.join(path, f'seed_{seed}.pkl')
     
-    elif args.vary == 'nsample':
-        signal = 0.6
-        rho1 = 0.8
-        s = args.s
-        for m, seed in itertools.product(np.arange(8, 13), np.arange(nrep)):
-            if l == args.jobid:
-                nsample = 2**m
-                print(signal, rho1, nsample, seed)
-                break
-            l = l + 1
-    
-    run(int(seed), nsample, rho1=rho1, signal=signal, equi=args.equi, path=os.path.join(args.rootdir, 'results/carving5'), target_d=target_d, s=s, scale=True, sampling_only=args.sampling_only)
+    print(config['target_d'])
+    run(config)
