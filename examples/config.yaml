@@ -1,0 +1,20 @@
+rootdir:
+  '../outputs/'
+n:
+  300
+p:
+  100
+ntune:
+  100
+target_d:
+s:
+  10
+rho1:
+  0.8
+cov_x:
+  AR1
+rho:
+  0.9
+nsample:
+  512
+
