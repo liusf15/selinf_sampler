@@ -7,6 +7,9 @@ import yaml
 import datetime
 import time
 import warnings
+import git
+
+
 from examples.instances import gaussian_instance
 from src.carving_class import gaussian_carving
 
@@ -146,7 +149,7 @@ def run(config):
     with open(config['savename'], 'wb') as f:
         pickle.dump(results, f)
 
-    print("saving results to", filename)
+    print("saving results to", config['savename'])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -172,10 +175,11 @@ if __name__ == "__main__":
     filename = f'carving_gaussian_{config["n"]}_{config["rho1"]}_{config["p"]}_s_{config["s"]}_targetd_{config["target_d"]}_{config["cov_x"]}_rho_{config["rho"]}_nsample_{nsample}_signalfac_{signal}'
     path = os.path.join(path, filename)
     os.makedirs(path, exist_ok=True)
+
+    repo = git.Repo(search_parent_directories=True)
+    config['git_sha'] = repo.head.object.hexsha
     with open(os.path.join(path, 'config.yaml'), 'w', encoding='utf8') as f:
         yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
 
     config['savename'] = os.path.join(path, f'seed_{seed}.pkl')
-    
-    print(config['target_d'])
     run(config)
