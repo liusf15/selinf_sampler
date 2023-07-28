@@ -544,20 +544,21 @@ class random_lasso():
         b_mean_added = -1 / ((1 - self.rho1) * self.sigma**2) * self.D @ self.r_[self.E]
         betahat_mean_added = self.D @ b_mean_added
 
-        a = beta_hat_prec @ beta_E + 1 / ((1 - self.rho1) * self.sigma**2) * self.r_[self.E]
-        b_marginal_mean = b_marginal_cov @ (b_mean_added + self.rho1 * self.D @ a)
-        betahat_marginal_mean = beta_hat_cov @ (a + betahat_mean_added)
+        # a = beta_hat_prec @ beta_E + 1 / ((1 - self.rho1) * self.sigma**2) * self.r_[self.E]
+        # b_marginal_mean = b_marginal_cov @ (b_mean_added + self.rho1 * self.D @ a)
+        # betahat_marginal_mean = beta_hat_cov @ (a + betahat_mean_added)
+        b_marginal_mean = self.D @ beta_E - self.H_inv @ self.D @ self.r_[self.E] * (self.kappa / self.sigma**2)
 
         L = np.linalg.cholesky(b_marginal_cov) 
         samples, weights = sample_sov(-b_marginal_mean, np.ones(self.d) * np.Inf, L, nsov, seed=seed)
         Z = samples @ L.T + b_marginal_mean
 
-        ll = -0.5 * (self.beta_hat - betahat_marginal_mean).T @ beta_hat_prec @ (self.beta_hat - betahat_marginal_mean) - np.log(np.mean(weights))
+        ll = -0.5 * (self.beta_hat - beta_E).T @ beta_hat_prec @ (self.beta_hat - beta_E) - np.log(np.mean(weights))
         res = {'loglik': ll}
 
         if return_grad:
             # gradient of the quadratic term
-            grad_0 = beta_hat_prec @ (betahat_marginal_mean - self.beta_hat)
+            grad_0 = beta_hat_prec @ (beta_E - self.beta_hat)
 
             # gradient of log-denominator
             grad_1 = self.D @ b_marginal_prec @ np.mean((Z - b_marginal_mean) * weights[:, None], 0) / np.mean(weights)

@@ -6,17 +6,14 @@ import pickle
 import yaml
 import datetime
 import time
-import warnings
 import git
-
-
 from examples.instances import gaussian_instance
 from src.carving_class import gaussian_carving
 
 MACHINE_EPS = np.finfo(np.float64).eps
 
 def run(config):
-    seed = config['seed']
+    seed = int(config['seed'])
     signal = config['signal']
     n = config['n']
     n1 = int(config['n'] * config['rho1'])
@@ -166,7 +163,7 @@ if __name__ == "__main__":
     for signal, seed in itertools.product([.6, .9, 1.2], np.arange(nrep)):
         if l == args.jobid:
             print(signal, seed)
-            config['seed'] = seed
+            config['seed'] = float(seed)
             config['signal'] = signal
             break
         l = l + 1
