@@ -77,6 +77,8 @@ class random_lasso():
         cov_b = self.H_inv + nu * np.outer(Dc, Dc)
         r = self.r_ + self.Q_1_ @ beta_perp
         mu_b_added = -self.kappa / self.sigma**2 * self.H_inv @ self.D @ r[self.E] # TODO
+        # k = self.K @ r[self.E]
+        # cov_b @ (-k + nu / (1 + self.kappa) * self.H @ Dc * np.dot(Dc, k))
         if nu > 0:
             mu_b_multi = self.kappa / (1 + self.kappa) / nu * cov_b @ Deta
         else:
@@ -174,6 +176,8 @@ class random_lasso():
             num = joint_cdf_bivnormal((theta_hat - c1 * xi_j_cond_mean - c0) / f, xi_j_cond_mean / xi_j_cond_sigma, rho_)
                 
             cdf_ = num / den
+            if np.isnan(cdf_):
+                raise ValueError("nan")
             if cdf_ < 0:
                 print("cdf < 0")        
             if cdf_ > 1:
@@ -186,8 +190,8 @@ class random_lasso():
 
         nu = params.var_theta / params.mu_theta_multi_theta
         sd = np.sqrt(nu * (1 + self.kappa))
-        splitting_right = theta_hat - sd * ndtri(sig_level / 2) 
-        splitting_left = theta_hat + sd * ndtri(sig_level / 2)
+        splitting_right = theta_hat - 2 * sd * ndtri(sig_level / 2) 
+        splitting_left = theta_hat + 2 * sd * ndtri(sig_level / 2)
         
         return ci_bisection(_pvalue_, sd, splitting_right, splitting_left, sig_level=sig_level, tol=1e-6)
 
@@ -360,6 +364,7 @@ class random_lasso():
         return ci_bisection(_pvalue_, sd, splitting_left, splitting_right, sig_level=sig_level, tol=1e-6)
         
     def sampling_inference(self, sig_level=0.05, two_sided=True, n_sov=512, seed=1):
+        start = time.time()
         params0 = self.prepare_eta(np.zeros(self.d))
         eta0_samples, eta0_weights = self.sample_auxillary(params0, 0., 'sov', nsample=n_sov, seed=seed)
         ci = np.zeros((self.d, 2))
@@ -369,8 +374,10 @@ class random_lasso():
             params = self.prepare_eta(eta)
             pval[j] = self.get_pvalue_eta0(params, 0., eta0_samples, eta0_weights, two_sided=two_sided)
             ci[j] = self.get_CI_eta0(params, eta0_samples, eta0_weights, sig_level=sig_level, two_sided=two_sided)
+        end = time.time()
         res = pd.DataFrame(ci, columns=['lower confidence', 'upper confidence'])
         res['pvalue'] = pval
+        res['time'] = end - start
         return res
 
     def get_pvalue_upper(self, params, theta, two_sided=True):
@@ -572,18 +579,21 @@ class random_lasso():
         return res
         
     def mle_sov(self, sig_level=0.05):
-        nsov = 1024
+        nsov = 256
         seed = 1
         # beta_hat_quad = 1 / (self.sigma**2 * (1 - self.rho1)) * self.X_E.T @ self.X_E
         # beta_hat_quad_inv = np.linalg.inv(beta_hat_quad)
         
         # GD
         beta_E = np.copy(self.beta_hat)
-        lr = 0.05
+        lr = 0.01
         maxit = 10000
         lls = []
+        start = time.time()
         for i in range(maxit):
             tmp = self.sel_loglik(beta_E, return_grad=True)
+            if np.isnan(tmp['loglik']):
+                raise ValueError("loglik is nan")
             grad = tmp['grad']
             lls.append(tmp['loglik'])
             beta_E = beta_E - lr * grad
@@ -602,8 +612,10 @@ class random_lasso():
         sds = np.sqrt(np.diag(mle_cov))
         lower = beta_mle + ndtri(sig_level / 2) * sds
         upper = beta_mle - ndtri(sig_level / 2) * sds
+        end = time.time()
         res = pd.DataFrame(np.vstack([beta_mle, lower, upper]).T, columns=['mle', 'lower confidence', 'upper confidence'])
         res['pvalues'] = 2 * norm.cdf(-np.abs(beta_mle) / sds)
+        res['time'] = end - start
         return res
 
 
@@ -613,11 +625,55 @@ class gaussian_carving(random_lasso):
         self.X_1 = X[:n1]
         self.Y_1 = Y[:n1]
         self.n1 = n1
+        self.n = X.shape[0]
         self.rho1 = self.n1 / self.n
+        Hat = X @ np.linalg.inv(X.T @ X) @ X.T
+        self.sigma = np.linalg.norm(Y - Hat @ Y) / np.sqrt(self.n - self.p)
     
-    def fit(self, lbd, X_tune=None, Y_tune=None, target_d=None, max_d=None):
-        g = glm.gaussian(self.X_1, self.Y_1)
-        if hasattr(lbd, '__len__') and X_tune is not None:  # if lbd is a list, use tuning data to select lbd
+    def fit(self, tune_lambda='cv_min', lbd=None, X_tune=None, Y_tune=None, target_d=None, max_d=None):
+        if tune_lambda in ['cv_min', 'cv_1se']: # 10-fold cross validation
+            idx = np.random.permutation(self.n1)
+            n_fold = 5
+            idx_folds = np.array_split(idx, n_fold)
+            if lbd is None or not hasattr(lbd, '__len__'):
+                lbd = np.logspace(np.log10(np.sqrt(np.log(self.p) / self.n1) ) - 1, np.log10(np.sqrt(np.log(self.p) / self.n1)) + 1, 20) / np.sqrt(self.n)
+            cv_err = np.zeros((n_fold, len(lbd)))
+            n1_ = self.n1 / n_fold * (n_fold - 1)
+            for k in range(n_fold):
+                X_holdout = self.X_1[idx_folds[k]]
+                Y_holdout = self.Y_1[idx_folds[k]]
+                X_k = np.delete(self.X_1, idx_folds[k], 0)
+                Y_k = np.delete(self.Y_1, idx_folds[k], 0)
+                g = glm.gaussian(X_k, Y_k)
+                for i in range(len(lbd)):
+                    model_ = lasso.lasso(g, lbd[i] * n1_)
+                    beta_ = model_.fit()
+                    # if max_d is not None and len(model_.active) > max_d:
+                    #     cv_err[k, i] = np.Inf
+                    # else:
+                    cv_err[k, i] = np.mean((Y_holdout - X_holdout @ beta_)**2)
+                    if len(model_.active) == 0:
+                        cv_err[k, i:] = cv_err[k, i]
+                        break
+            cv_err = np.mean(cv_err, 0)
+            cv_std = np.std(cv_err, 0)
+            if tune_lambda == 'cv_min':
+                self.lbd = lbd[np.argmin(cv_err)]
+            elif tune_lambda == 'cv_1se': # 1 standard error rule
+                self.lbd = lbd[np.where(cv_err <= cv_err.min() + cv_std)[0][0]]
+            else:
+                raise ValueError("tune_lambda must be 'cv_min' or 'cv_1se'")
+            g = glm.gaussian(self.X_1, self.Y_1)
+            self.lbd = self.lbd * self.n1
+            self.model = lasso.lasso(g, self.lbd)
+            self.beta_lasso = self.model.fit()
+            self.selected = np.zeros(self.p, np.bool_)
+            self.selected[self.model.active] = True
+        
+        elif tune_lambda == 'extra_data':
+            g = glm.gaussian(self.X_1, self.Y_1)
+            # elif hasattr(lbd, '__len__') and X_tune is not None:  # if lbd is a list, use tuning data to select lbd
+            lbd = np.logspace(np.log10(np.sqrt(np.log(self.p) / self.n1) ) - 1, np.log10(np.sqrt(np.log(self.p) / self.n1)) + 1, 20) / np.sqrt(self.n)
             min_err = np.Inf
             for lbd_ in lbd:
                 model_ = lasso.lasso(g, lbd_ * self.n1)
@@ -640,13 +696,15 @@ class gaussian_carving(random_lasso):
                 if sum(selected_) == 0:
                     break
             # print("selected {} variables".format(sum(selected)))
-            self.lbd = lbd_best
+            self.lbd = lbd_best * self.n1
             self.beta_lasso = beta_lasso
             self.selected = selected
             self.model = model
-        elif target_d is not None and target_d > 0:
+
+        elif tune_lambda == 'fixed_d':
+            g = glm.gaussian(self.X_1, self.Y_1)
             lo = 0
-            hi = lbd
+            hi = 10 * np.sqrt(np.log(self.p) / self.n1) / np.sqrt(self.n)
             model_ = lasso.lasso(g, hi * self.n1)
             beta_lasso_ = model_.fit()
             if len(model_.active) < target_d:
@@ -663,17 +721,27 @@ class gaussian_carving(random_lasso):
                         break
             else:
                 lbd = hi
-            self.lbd = lbd
-            self.model = lasso.lasso(g, lbd * self.n1)
+            self.lbd = lbd * self.n1
+            self.model = lasso.lasso(g, self.lbd)
             self.beta_lasso = self.model.fit()
             self.selected = np.zeros(self.p, np.bool_)
             self.selected[self.model.active] = True
+        elif tune_lambda == 'theory':
+            g = glm.gaussian(self.X_1, self.Y_1)
+            self.lbd = self.sigma * np.sqrt(np.log(self.p) / self.n1) / np.sqrt(self.n) # optimal lambda for 1/(2n) normalization
+            self.lbd = self.lbd * self.n1 # for (1/2) normalization
+            self.model = lasso.lasso(g, self.lbd) # this solves \frac{1}{2} \|y-X\beta\|^2_2 + \lambda \|\beta\|_1
+            self.beta_lasso = self.model.fit()
+            self.selected = np.zeros(self.p, np.bool_)
+            self.selected[self.model.active] = True
+            
+            # debug
+            # subgrad = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso[self.selected]) 
+            # assert np.allclose(subgrad[self.selected], self.lbd * np.sign(self.beta_lasso[self.selected]), atol=1e-4)
+            # print(subgrad[self.selected])
+            # print(self.lbd * np.sign(self.beta_lasso[self.selected]))
         else:
-            self.model = lasso.lasso(g, lbd * self.n1) #\frac{1}{2} \|y-X\beta\|^2_2 + \lambda \|\beta\|_1
-            self.beta_lasso = self.model.fit()
-            self.selected = np.zeros(self.p, np.bool_)
-            self.selected[self.model.active] = True
-
+            raise NotImplementedError("tune_lambda must be 'cv_min', 'cv_1se', 'extra_data', 'fixed_d', or 'theory'")
         self.d = int(sum(self.selected))
         self.E = self.selected
         self.beta_lasso = self.beta_lasso[self.selected]
@@ -681,14 +749,14 @@ class gaussian_carving(random_lasso):
 
     def prepare_inference(self, target='selected', dispersion=None):
         self.beta_hat = inv(self.X_E.T @ self.X_E) @ self.X_E.T @ self.Y
-        if dispersion is not None:
-            self.sigma = dispersion
-        else:
-            # self.sigma = np.std(self.Y)
-            self.sigma = np.sqrt(np.sum((self.Y - self.X_E @ self.beta_hat)**2) / (self.n - self.d))
+        # if dispersion is not None:
+        #     self.sigma = dispersion
+        # else:
+        #     # self.sigma = np.std(self.Y)
+        #     self.sigma = np.sqrt(np.sum((self.Y - self.X_E @ self.beta_hat)**2) / (self.n - self.d))
         self.subgrad = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso) #/ self.n1
-        if not (np.alltrue(abs(self.subgrad[~self.selected]) < self.lbd * self.n1) and np.allclose(self.subgrad[self.selected], self.lbd * self.n1 * np.sign(self.beta_lasso), rtol=1e-4)): 
-            print("incorrect subgradient")
+        if not (np.alltrue(abs(self.subgrad[~self.selected]) < self.lbd) and np.allclose(self.subgrad[self.selected], self.lbd * np.sign(self.beta_lasso), atol=1e-4)): 
+            raise AssertionError("incorrect subgradient")
         self.Sigma_X = self.X.T @ self.X #/ self.n
         if target == 'selected':
             self.Lambda = self.sigma**2 * np.linalg.inv(self.Sigma_X[self.selected][:, self.selected])
@@ -699,6 +767,7 @@ class gaussian_carving(random_lasso):
         N = -self.X.T @ (self.Y - self.X_E @ self.beta_hat) * self.rho1
         self.r_ = self.subgrad + N
         self.Q_1_ = -self.X.T @ self.X_E * self.rho1  
+
         self.signs = np.sign(self.beta_lasso)
         self.D = np.diag(self.signs)
         signed_XE = self.X[:, self.E] @ self.D
@@ -715,16 +784,16 @@ class gaussian_carving(random_lasso):
         self.K = 1 / (self.sigma**2 * (1 - self.rho1)) * self.D @ J_E
 
         # debug
-        # Q_2 = self.X.T @ signed_XE * self.rho1
-        # Sigma_omega = self.sigma**2 * (1 - self.rho1) * self.rho1 * self.Sigma_X
-        # assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega), self.K)
-        # assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega) @ Q_2, self.H)
-        # tmp = self.Q_1_@self.beta_hat + Q_2 @ self.D @ self.beta_lasso + self.r_ 
-        # omega = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso) - self.X.T @ (self.Y - self.X[:, self.selected] @ self.beta_lasso) / self.n * self.n1
-        # assert np.allclose(tmp, omega)
+        Q_2 = self.X.T @ signed_XE * self.rho1
+        Sigma_omega = self.sigma**2 * (1 - self.rho1) * self.rho1 * self.Sigma_X
+        assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega), self.K)
+        assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega) @ Q_2, self.H)
+        tmp = self.Q_1_@self.beta_hat + Q_2 @ self.D @ self.beta_lasso + self.r_ 
+        omega = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso) - self.X.T @ (self.Y - self.X[:, self.selected] @ self.beta_lasso) / self.n * self.n1
+        assert np.allclose(tmp, omega)
 
     def approx_mle_inference(self, target='selected', sig_level=0.05):
-        feature_weights_ = np.ones(self.p) * self.lbd * self.n
+        feature_weights_ = np.ones(self.p) * self.lbd / self.rho1 #/ self.n
         perturb = np.zeros(self.n, dtype=bool)
         perturb[:self.n1] = True
         selector = split_lasso.gaussian(self.X, self.Y, feature_weights_, proportion=self.rho1, estimate_dispersion=True)
