@@ -87,26 +87,25 @@ def run(config):
     print('allIS CI', allIS_result)
     print("length", np.mean(allIS_ci[:, 1] - allIS_ci[:, 0]))
 
-
     # unbiased estimator
     E = carving.E
     beta_hat_2 = carving.beta_hat_2
 
-    sov_ci = np.zeros((d, 2))
-    sov_pval = np.zeros(d)
-    start = time.time()
-    for j in range(d):
-        print('sov', j)
-        eta = np.eye(d)[j]
-        params = carving.prepare_eta(eta)
-        sov_samples, sov_weights = carving.sample_auxillary(params, 0., 'sov', nsample=n_sov, seed=seed*1000+j+1)
-        sov_pval[j] = carving.get_pvalue(params, 0., sov_samples, sov_weights)
+    # sov_ci = np.zeros((d, 2))
+    # sov_pval = np.zeros(d)
+    # start = time.time()
+    # for j in range(d):
+    #     print('sov', j)
+    #     eta = np.eye(d)[j]
+    #     params = carving.prepare_eta(eta)
+    #     sov_samples, sov_weights = carving.sample_auxillary(params, 0., 'sov', nsample=n_sov, seed=seed*1000+j+1)
+    #     sov_pval[j] = carving.get_pvalue(params, 0., sov_samples, sov_weights)
 
-        sov_samples, sov_weights = carving.sample_auxillary(params, beta_hat_2[j], 'sov', nsample=n_sov, seed=seed*1000+j+1)
-        sov_ci[j] = carving.get_CI(params, sov_samples, beta_hat_2[j], sov_weights, sig_level=sig_level)
-    sov_time = (time.time() - start)
-    sov_covered = (beta_target <= sov_ci[:, 1]) * (beta_target >= sov_ci[:, 0])
-    print('sov CI', sov_ci, sov_pval)
+    #     sov_samples, sov_weights = carving.sample_auxillary(params, beta_hat_2[j], 'sov', nsample=n_sov, seed=seed*1000+j+1)
+    #     sov_ci[j] = carving.get_CI(params, sov_samples, beta_hat_2[j], sov_weights, sig_level=sig_level)
+    # sov_time = (time.time() - start)
+    # sov_covered = (beta_target <= sov_ci[:, 1]) * (beta_target >= sov_ci[:, 0])
+    # print('sov CI', sov_ci, sov_pval)
 
     # Gibbs
     n_gibbs = nsample
@@ -131,14 +130,14 @@ def run(config):
     gibbs_covered = (beta_target <= gibbs_ci[:, 1]) * (beta_target >= gibbs_ci[:, 0])
     print('gibbs CI', gibbs_ci)
 
-    pvalues = np.stack([naive_pval, splitting_pval, mle_approx_pval, mle_sov_pval, exact_pval, allIS_pval, gibbs_pval, sov_pval])
-    ci = np.stack([naive_ci, splitting_ci, mle_approx_ci, mle_sov_ci, exact_ci, allIS_ci, gibbs_ci, sov_ci])
-    covered = np.stack([naive_covered, splitting_covered, mle_approx_covered, mle_sov_covered, exact_covered, allIS_covered, gibbs_covered, sov_covered])
+    pvalues = np.stack([naive_pval, splitting_pval, mle_approx_pval, mle_sov_pval, exact_pval, allIS_pval, gibbs_pval])
+    ci = np.stack([naive_ci, splitting_ci, mle_approx_ci, mle_sov_ci, exact_ci, allIS_ci, gibbs_ci])
+    covered = np.stack([naive_covered, splitting_covered, mle_approx_covered, mle_sov_covered, exact_covered, allIS_covered, gibbs_covered])
     print(np.mean(covered, 1))
 
-    times = np.stack([mle_approx_time, mle_sov_time, allIS_time, gibbs_time, sov_time])
+    times = np.stack([mle_approx_time, mle_sov_time, allIS_time, gibbs_time])
     print('times', times)
-    methods = ['naive', 'splitting', 'mle_approx', 'mle_sov', 'exact', 'allIS', 'gibbs', 'sov']
+    methods = ['naive', 'splitting', 'mle_approx', 'mle_sov', 'exact', 'allIS', 'gibbs']
     results = {'pvalue': pvalues, 'ci': ci, 'covered': covered, 'times': times, 'methods': methods}
     print(results)
 
