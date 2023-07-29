@@ -129,7 +129,7 @@ def gaussian_instance(n=100,
     noise = rng.standard_normal(n)
     
     Y = (X.dot(beta) + noise) * sigma
-    return X, Y, beta * sigma
+    return X, Y, beta * sigma, chol, scaling
 
 
 def logistic_instance(n=100,
