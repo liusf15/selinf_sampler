@@ -513,12 +513,7 @@ class random_lasso():
             res['hess'] = H_0 - H_1
         return res
         
-    def mle_sov(self, sig_level=0.05):
-        nsov = 256
-        seed = 1
-        # beta_hat_quad = 1 / (self.sigma**2 * (1 - self.rho1)) * self.X_E.T @ self.X_E
-        # beta_hat_quad_inv = np.linalg.inv(beta_hat_quad)
-        
+    def mle_sov(self, nsov=512, seed=1, sig_level=0.05):
         # GD
         beta_E = np.copy(self.beta_hat)
         lr = 0.01
@@ -526,7 +521,7 @@ class random_lasso():
         lls = []
         start = time.time()
         for i in range(maxit):
-            tmp = self.sel_loglik(beta_E, return_grad=True)
+            tmp = self.sel_loglik(beta_E, return_grad=True, nsov=nsov, seed=seed)
             if np.isnan(tmp['loglik']):
                 raise ValueError("loglik is nan")
             grad = tmp['grad']
@@ -543,7 +538,7 @@ class random_lasso():
         if i == maxit - 1:
             print("failed to converge")
         beta_mle = beta_E
-        mle_cov = inv(-self.sel_loglik(beta_mle, return_grad=True, return_hess=True)['hess'])
+        mle_cov = inv(-self.sel_loglik(beta_mle, return_grad=True, return_hess=True, nsov=nsov, seed=seed)['hess'])
         sds = np.sqrt(np.diag(mle_cov))
         lower = beta_mle + ndtri(sig_level / 2) * sds
         upper = beta_mle - ndtri(sig_level / 2) * sds
