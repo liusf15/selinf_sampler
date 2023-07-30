@@ -29,37 +29,27 @@ class random_lasso():
         self.p = X.shape[1]
         
     def prepare_eta(self, eta):
-        # compute 
         nu = np.dot(eta, self.Lambda @ eta) 
         if nu > 0:
             c = self.Lambda @ eta / nu
         else:
             c = np.zeros(self.d)
         Dc = self.D @ c
-        # Deta = self.D @ eta
         theta_hat = np.dot(eta, self.beta_hat)
         beta_perp = self.beta_hat - c * theta_hat
         HDc = self.H @ Dc
         var_theta = 1 / (1 / nu + np.dot(Dc, HDc))
         cov_b_inv = self.H - var_theta * np.outer(HDc, HDc)
-        # cov_b = self.H_inv + nu * np.outer(Dc, Dc)
         cov_b = np.linalg.inv(cov_b_inv)
-
         r = self.r_ + self.Q_1_ @ beta_perp
-        # mu_b_added = -self.n * self.kappa / self.sigma**2 * self.H_inv @ self.D @ r[self.E]
         Kr = self.K @ r
         mu_b_added = cov_b @ (-Kr + var_theta * np.outer(HDc, Dc) @ Kr)
         if nu > 0:
             mu_b_multi = var_theta / nu * cov_b @ HDc
         else:
             mu_b_multi = np.zeros(self.d)
-
-        # r = self.r_ + self.Q_1_ @ beta_perp
-        # var_theta = (1 - self.rho1) * nu
-        # mu_theta_multi_theta = 1 - self.rho1
         mu_theta_multi_theta = var_theta / nu
         mu_theta_multi_b = var_theta * HDc
-        # mu_theta_added = self.rho1 / self.sigma**2 * self.n * nu * np.dot(c, r[self.E])
         mu_theta_added = var_theta * np.dot(Dc, Kr)
         return Params(eta, theta_hat, cov_b, mu_b_added, mu_b_multi, var_theta, mu_theta_added, mu_theta_multi_b, mu_theta_multi_theta)
 
