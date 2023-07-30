@@ -166,7 +166,7 @@ if __name__ == "__main__":
     l = 0
     nrep = 200
     nsample = config['nsample']
-    for signal, seed in itertools.product([.1, .3, .5, .7], np.arange(nrep)):
+    for signal, seed in itertools.product([.3, .5, .7], np.arange(nrep)):
         if l == args.jobid:
             print(signal, seed)
             config['seed'] = int(seed)
