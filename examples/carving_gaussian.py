@@ -80,7 +80,6 @@ def run(config):
     for j in range(d):
         eta = np.eye(d)[j]
         params = carving.prepare_eta(eta)
-        carving.prepare_eta(eta)
         bvn_pval[j] = carving.exact_bivar_pivot(j, params, 0., True)
         bvn_ci[j] = carving.exact_bivar_interval(j, params, sig_level, True)
     bvn_time = time.time() - start
