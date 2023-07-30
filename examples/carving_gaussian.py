@@ -33,11 +33,6 @@ def run(config):
         Y_tune = X_tune @ beta + np.random.normal(0, 1, size=ntune)
 
     carving = gaussian_carving(X, Y, n1)
-    # if target_d is not None and target_d > 0:
-    #     carving.fit(5, target_d=target_d)
-    # else:
-    #     carving.fit(lbd_list, X_tune=X_tune, Y_tune=Y_tune, max_d=40)
-
     carving.fit(config['tune_lambda'], None, X_tune, Y_tune, config['target_d'], max_d=40)
     carving.prepare_inference()
     d = carving.d
@@ -47,15 +42,18 @@ def run(config):
         return
     beta_target = np.linalg.pinv(X[:, carving.E]).dot(X.dot(beta))  
     sig_level = 0.05
+    E = carving.E
 
     # naive
     naive_pval, naive_ci = carving.naive_inference(sig_level)
     naive_covered = (beta_target <= naive_ci[:, 1]) * (beta_target >= naive_ci[:, 0])
+    naive_mse = np.array([np.sum((carving.beta_hat - beta_target)**2), np.sum((carving.beta_hat - beta[E])**2)])
     print('naive coverage', np.mean(naive_covered))
 
     # splitting
     splitting_pval, splitting_ci = carving.splitting_inference(sig_level)
     splitting_covered = (beta_target <= splitting_ci[:, 1]) * (beta_target >= splitting_ci[:, 0])
+    splitting_mse = np.array([np.sum((carving.beta_hat_2 - beta_target)**2), np.sum((carving.beta_hat_2 - beta[E])**2)])
     print('splitting coverage', np.mean(splitting_covered))
 
     # selective MLE
@@ -64,13 +62,16 @@ def run(config):
     mle_approx_ci = np.array(mle_approx_result[['lower_confidence', 'upper_confidence']])
     mle_approx_covered = (beta_target <= mle_approx_ci[:, 1]) * (beta_target >= mle_approx_ci[:, 0])
     mle_approx_time = mle_approx_result['time'].iloc[0]
+    mle_approx_mse = np.array([np.sum((mle_approx_result['MLE'].values - beta_target)**2), np.sum((mle_approx_result['MLE'].values - beta[E])**2)])
     print("MLE (approx) coverage", np.mean(mle_approx_covered))
 
     mle_sov_result = carving.mle_sov()
     mle_sov_time = mle_sov_result['time'].iloc[0]
-    mle_sov_ci = np.array(mle_sov_result[['lower confidence', 'upper confidence']])
+    mle_sov_ci = np.array(mle_sov_result[['lower_confidence', 'upper_confidence']])
     mle_sov_pval = np.array(mle_sov_result['pvalues'])
     mle_sov_covered = (beta_target <= mle_sov_ci[:, 1]) * (beta_target >= mle_sov_ci[:, 0])
+    mle_sov_mse = np.array([np.sum((mle_sov_result['MLE'].values - beta_target)**2), np.sum((mle_sov_result['MLE'].values - beta[E])**2)])
+
     print("MLE (SOV) coverage", np.mean(mle_sov_covered))
 
     # exact bivariate pivot
@@ -138,11 +139,12 @@ def run(config):
     ci = np.stack([naive_ci, splitting_ci, mle_approx_ci, mle_sov_ci, bvn_ci, allIS_ci, gibbs_ci])
     covered = np.stack([naive_covered, splitting_covered, mle_approx_covered, mle_sov_covered, bvn_covered, allIS_covered, gibbs_covered])
     print('coverage:', np.mean(covered, 1))
-
+    MSE = np.stack([naive_mse, splitting_mse, mle_approx_mse, mle_sov_mse])
+    print("MSE:", MSE)
     times = np.stack([mle_approx_time, mle_sov_time, bvn_time, allIS_time, gibbs_time])
     print('times', times)
     methods = ['naive', 'splitting', 'mle_approx', 'mle_sov', 'bivariate_normal', 'allIS', 'gibbs']
-    results = {'pvalue': pvalues, 'ci': ci, 'covered': covered, 'times': times, 'methods': methods, 'selected_target': beta_target, 'full_target': beta[carving.E]}
+    results = {'pvalue': pvalues, 'ci': ci, 'covered': covered, 'times': times, 'methods': methods, 'selected_target': beta_target, 'full_target': beta[carving.E], 'MSE': MSE}
     print('length:', np.mean(results['ci'][:, :, 1] - results['ci'][:, :, 0], 1))
 
     with open(config['savename'], 'wb') as f:

@@ -542,7 +542,7 @@ class random_lasso():
         lower = beta_mle + ndtri(sig_level / 2) * sds
         upper = beta_mle - ndtri(sig_level / 2) * sds
         end = time.time()
-        res = pd.DataFrame(np.vstack([beta_mle, lower, upper]).T, columns=['mle', 'lower confidence', 'upper confidence'])
+        res = pd.DataFrame(np.vstack([beta_mle, lower, upper]).T, columns=['MLE', 'lower_confidence', 'upper_confidence'])
         res['pvalues'] = 2 * norm.cdf(-np.abs(beta_mle) / sds)
         res['time'] = end - start
         return res
@@ -664,23 +664,17 @@ class gaussian_carving(random_lasso):
         self.beta_lasso = self.beta_lasso[self.selected]
         self.X_E = self.X[:, self.selected]
 
-    def prepare_inference(self, target='selected', dispersion=None):
+    def prepare_inference(self, target='selected'):
         self.beta_hat = inv(self.X_E.T @ self.X_E) @ self.X_E.T @ self.Y
-        # if dispersion is not None:
-        #     self.sigma = dispersion
-        # else:
-        #     # self.sigma = np.std(self.Y)
-        #     self.sigma = np.sqrt(np.sum((self.Y - self.X_E @ self.beta_hat)**2) / (self.n - self.d))
-        self.subgrad = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso) #/ self.n1
+        self.subgrad = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso) 
         if not (np.alltrue(abs(self.subgrad[~self.selected]) < self.lbd) and np.allclose(self.subgrad[self.selected], self.lbd * np.sign(self.beta_lasso), atol=1e-4)): 
             raise AssertionError("incorrect subgradient")
-        self.Sigma_X = self.X.T @ self.X #/ self.n
+        self.Sigma_X = self.X.T @ self.X 
         if target == 'selected':
             self.Lambda = self.sigma**2 * np.linalg.inv(self.Sigma_X[self.selected][:, self.selected])
         elif target == 'full':
             self.Lambda = self.sigma**2 * np.linalg.inv(self.Sigma_X)
             self.Lambda = self.Lambda[self.selected][:, self.selected]
-        # self.Gamma = self.sigma**2 * (1 - self.rho1) / self.rho1 / self.n * self.Sigma_X
         N = -self.X.T @ (self.Y - self.X_E @ self.beta_hat) * self.rho1
         self.r_ = self.subgrad + N
         self.Q_1_ = -self.X.T @ self.X_E * self.rho1  
@@ -690,7 +684,7 @@ class gaussian_carving(random_lasso):
         signed_XE = self.X[:, self.E] @ self.D
         self.H = self.rho1 / (1-self.rho1) * signed_XE.T @ signed_XE / self.sigma**2
         self.H_inv = np.linalg.inv(self.H)
-        self.kappa = self.rho1 / (1 - self.rho1) #* self.sigma**2
+        self.kappa = self.rho1 / (1 - self.rho1) 
         self.beta_hat_2 = inv(self.X[self.n1:, self.E].T @ self.X[self.n1:, self.E]) @ self.X[self.n1:, self.E].T @ self.Y[self.n1:]
         if target == 'selected':
             self.Sigma_2 = self.sigma**2 * inv(self.X[self.n1:, self.E].T @ self.X[self.n1:, self.E])
@@ -701,13 +695,13 @@ class gaussian_carving(random_lasso):
         self.K = 1 / (self.sigma**2 * (1 - self.rho1)) * self.D @ J_E
 
         # debug
-        Q_2 = self.X.T @ signed_XE * self.rho1
-        Sigma_omega = self.sigma**2 * (1 - self.rho1) * self.rho1 * self.Sigma_X
-        assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega), self.K)
-        assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega) @ Q_2, self.H)
-        tmp = self.Q_1_@self.beta_hat + Q_2 @ self.D @ self.beta_lasso + self.r_ 
-        omega = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso) - self.X.T @ (self.Y - self.X[:, self.selected] @ self.beta_lasso) / self.n * self.n1
-        assert np.allclose(tmp, omega)
+        # Q_2 = self.X.T @ signed_XE * self.rho1
+        # Sigma_omega = self.sigma**2 * (1 - self.rho1) * self.rho1 * self.Sigma_X
+        # assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega), self.K)
+        # assert np.allclose(Q_2.T @ np.linalg.inv(Sigma_omega) @ Q_2, self.H)
+        # tmp = self.Q_1_@self.beta_hat + Q_2 @ self.D @ self.beta_lasso + self.r_ 
+        # omega = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso) - self.X.T @ (self.Y - self.X[:, self.selected] @ self.beta_lasso) / self.n * self.n1
+        # assert np.allclose(tmp, omega)
 
     def approx_mle_inference(self, target='selected', sig_level=0.05):
         feature_weights_ = np.ones(self.p) * self.lbd / self.rho1 #/ self.n
