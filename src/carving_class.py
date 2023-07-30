@@ -63,34 +63,6 @@ class random_lasso():
         mu_theta_added = var_theta * np.dot(Dc, Kr)
         return Params(eta, theta_hat, cov_b, mu_b_added, mu_b_multi, var_theta, mu_theta_added, mu_theta_multi_b, mu_theta_multi_theta)
 
-    def prepare_eta_2(self, eta):
-        # compute 
-        nu = np.dot(eta, self.Lambda @ eta)
-        if nu > 0:
-            c = self.Lambda @ eta / nu
-        else:
-            c = np.zeros(self.d)
-        Dc = self.D @ c
-        Deta = self.D @ eta
-        theta_hat = np.dot(eta, self.beta_hat)
-        beta_perp = self.beta_hat - c * theta_hat
-        cov_b = self.H_inv + nu * np.outer(Dc, Dc)
-        r = self.r_ + self.Q_1_ @ beta_perp
-        mu_b_added = -self.kappa / self.sigma**2 * self.H_inv @ self.D @ r[self.E] # TODO
-        # k = self.K @ r[self.E]
-        # cov_b @ (-k + nu / (1 + self.kappa) * self.H @ Dc * np.dot(Dc, k))
-        if nu > 0:
-            mu_b_multi = self.kappa / (1 + self.kappa) / nu * cov_b @ Deta
-        else:
-            mu_b_multi = np.zeros(self.d)
-
-        r = self.r_ + self.Q_1_ @ beta_perp
-        var_theta = nu / (1 + self.kappa)
-        mu_theta_multi_theta = 1 / (1 + self.kappa)
-        mu_theta_multi_b = self.kappa / (1 + self.kappa) * Deta
-        mu_theta_added = nu * self.kappa / (1 + self.kappa) / self.sigma**2 * np.dot(c, r[self.E])
-        return Params(eta, theta_hat, cov_b, mu_b_added, mu_b_multi, var_theta, mu_theta_added, mu_theta_multi_b, mu_theta_multi_theta)
-
     def naive_inference(self, sig_level=0.05, beta=None):
         sd = np.sqrt(np.diag(self.Lambda))
         q = ndtri(sig_level / 2)
