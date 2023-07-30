@@ -81,13 +81,11 @@ class random_lasso():
         theta_hat = params.theta_hat
         theta_cond_var = params.var_theta
         theta_mean_multi_theta = params.mu_theta_multi_theta
-
         theta_mean_added = params.mu_theta_added
         theta_mean_multi_b = params.mu_theta_multi_b
         c1 = theta_mean_multi_b[j]
 
         msk_j = np.concatenate([np.arange(j), np.arange(j+1, d)])
-        
         xi_cov = params.cov_b
         xi_mean_added = params.mu_b_added
         xi_mean_multi = params.mu_b_multi
