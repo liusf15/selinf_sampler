@@ -514,7 +514,6 @@ class random_lasso():
         return res
         
     def mle_sov(self, nsov=512, seed=1, sig_level=0.05):
-        # GD
         beta_E = np.copy(self.beta_hat)
         lr = 0.01
         maxit = 10000
@@ -548,7 +547,6 @@ class random_lasso():
         res['time'] = end - start
         return res
 
-
 class gaussian_carving(random_lasso):
     def __init__(self, X, Y, n1) -> None:
         super().__init__(X, Y)
@@ -561,7 +559,7 @@ class gaussian_carving(random_lasso):
         self.sigma = np.linalg.norm(Y - Hat @ Y) / np.sqrt(self.n - self.p)
     
     def fit(self, tune_lambda='cv_min', lbd=None, X_tune=None, Y_tune=None, target_d=None, max_d=None):
-        if tune_lambda in ['cv_min', 'cv_1se']: # 10-fold cross validation
+        if tune_lambda in ['cv_min', 'cv_1se']: # 5-fold cross validation
             idx = np.random.permutation(self.n1)
             n_fold = 5
             idx_folds = np.array_split(idx, n_fold)
@@ -578,9 +576,6 @@ class gaussian_carving(random_lasso):
                 for i in range(len(lbd)):
                     model_ = lasso.lasso(g, lbd[i] * n1_)
                     beta_ = model_.fit()
-                    # if max_d is not None and len(model_.active) > max_d:
-                    #     cv_err[k, i] = np.Inf
-                    # else:
                     cv_err[k, i] = np.mean((Y_holdout - X_holdout @ beta_)**2)
                     if len(model_.active) == 0:
                         cv_err[k, i:] = cv_err[k, i]
@@ -602,7 +597,6 @@ class gaussian_carving(random_lasso):
         
         elif tune_lambda == 'extra_data':
             g = glm.gaussian(self.X_1, self.Y_1)
-            # elif hasattr(lbd, '__len__') and X_tune is not None:  # if lbd is a list, use tuning data to select lbd
             lbd = np.logspace(np.log10(np.sqrt(np.log(self.p) / self.n1) ) - 1, np.log10(np.sqrt(np.log(self.p) / self.n1)) + 1, 20) / np.sqrt(self.n)
             min_err = np.Inf
             for lbd_ in lbd:
@@ -625,7 +619,6 @@ class gaussian_carving(random_lasso):
                     lbd_best = lbd_
                 if sum(selected_) == 0:
                     break
-            # print("selected {} variables".format(sum(selected)))
             self.lbd = lbd_best * self.n1
             self.beta_lasso = beta_lasso
             self.selected = selected
@@ -664,12 +657,6 @@ class gaussian_carving(random_lasso):
             self.beta_lasso = self.model.fit()
             self.selected = np.zeros(self.p, np.bool_)
             self.selected[self.model.active] = True
-            
-            # debug
-            # subgrad = self.X_1.T @ (self.Y_1 - self.X_1[:, self.selected] @ self.beta_lasso[self.selected]) 
-            # assert np.allclose(subgrad[self.selected], self.lbd * np.sign(self.beta_lasso[self.selected]), atol=1e-4)
-            # print(subgrad[self.selected])
-            # print(self.lbd * np.sign(self.beta_lasso[self.selected]))
         else:
             raise NotImplementedError("tune_lambda must be 'cv_min', 'cv_1se', 'extra_data', 'fixed_d', or 'theory'")
         self.d = int(sum(self.selected))
