@@ -239,7 +239,6 @@ class random_lasso():
             weights = np.ones(len(samples))
         xi_HDc = samples @ HDc
         nu = var_theta / params.mu_theta_multi_theta
-        # tau_1 = self.kappa / (1 + self.kappa) / nu
         sd = np.sqrt(nu * (1 + self.kappa))
         splitting_right = theta_hat - sd * ndtri(sig_level / 2)
         splitting_left = theta_hat + sd * ndtri(sig_level / 2)
@@ -263,27 +262,11 @@ class random_lasso():
         HDc = params.mu_theta_multi_b / var_theta
         xi_HDc = samples @ HDc
         weights_2 = np.exp(var_theta * xi_HDc ** 2 / 2)
-
         weights_2 = weights_2 * np.exp(theta * var_theta / nu * xi_HDc)
         tau = params.mu_theta_added - theta_hat
         weights_2 = weights_2 * np.exp(tau * xi_HDc)
         weights_2 = weights_2 * weights
-
         theta_cond_sd = np.sqrt(var_theta)
-
-        # debug
-        # theta_mean_multi_theta = params.mu_theta_multi_theta
-        # theta_mean_added = params.mu_theta_added
-        # theta_hat = params.theta_hat
-        # theta_center = (1 + self.kappa) * theta_hat - self.kappa * np.dot(params.eta, self.Lambda @ self.subgrad[self.E]) / self.sigma**2
-
-        # tau_1 = self.kappa / nu / (1 + self.kappa)
-        # tau_2 = self.kappa * tau_1 / 2
-        # Deta = self.D @ params.eta
-        # xi_D_eta = samples @ Deta
-        # weights_2 = weights * np.exp(tau_2 * xi_D_eta ** 2 + tau_1 * xi_D_eta * (theta - theta_center))
-        # print(np.mean(weights_2))
-
         den = np.mean(weights_2)
         theta_cond_mean = params.mu_theta_added + samples @ params.mu_theta_multi_b + params.mu_theta_multi_theta * theta
         num = np.mean(norm.cdf((theta_hat - theta_cond_mean) / theta_cond_sd) * weights_2)
