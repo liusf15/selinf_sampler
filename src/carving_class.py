@@ -487,16 +487,9 @@ class random_lasso():
         return ci_bisection(_pvalue_, sd, ci_left, ci_right, sig_level=sig_level, tol=1e-6)
 
     def sel_loglik(self, beta_E, return_grad=False, return_hess=False, nsov=512, seed=1):
-        beta_hat_cov = self.Lambda
         beta_hat_prec = np.linalg.inv(self.Lambda)
         b_marginal_prec = (1 - self.rho1) * self.H
         b_marginal_cov = self.H_inv / (1 - self.rho1)
-        b_mean_added = -1 / ((1 - self.rho1) * self.sigma**2) * self.D @ self.r_[self.E]
-        betahat_mean_added = self.D @ b_mean_added
-
-        # a = beta_hat_prec @ beta_E + 1 / ((1 - self.rho1) * self.sigma**2) * self.r_[self.E]
-        # b_marginal_mean = b_marginal_cov @ (b_mean_added + self.rho1 * self.D @ a)
-        # betahat_marginal_mean = beta_hat_cov @ (a + betahat_mean_added)
         b_marginal_mean = self.D @ beta_E - self.H_inv @ self.D @ self.r_[self.E] * (self.kappa / self.sigma**2)
 
         L = np.linalg.cholesky(b_marginal_cov) 
@@ -517,7 +510,6 @@ class random_lasso():
             H_0 = -beta_hat_prec
             H_1 = (Z - b_marginal_mean).T @ np.diag(weights) @ (Z - b_marginal_mean) - b_marginal_cov * np.sum(weights)
             H_1 = self.D @ b_marginal_prec @ H_1 @ b_marginal_prec @ self.D / np.sum(weights) - np.outer(grad_1, grad_1)
-            # H_1 = self.D @ H_1 @ self.D
             res['hess'] = H_0 - H_1
         return res
         
