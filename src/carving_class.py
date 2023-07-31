@@ -560,7 +560,8 @@ class gaussian_carving(random_lasso):
     
     def fit(self, tune_lambda='cv_min', lbd=None, X_tune=None, Y_tune=None, target_d=None, max_d=None):
         if tune_lambda in ['cv_min', 'cv_1se']: # 5-fold cross validation
-            idx = np.random.permutation(self.n1)
+            rng = np.random.default_rng(1)
+            idx = rng.permutation(self.n1)
             n_fold = 5
             idx_folds = np.array_split(idx, n_fold)
             if lbd is None or not hasattr(lbd, '__len__'):
