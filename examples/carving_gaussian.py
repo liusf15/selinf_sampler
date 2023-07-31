@@ -65,7 +65,7 @@ def run(config):
     mle_approx_mse = np.array([np.sum((mle_approx_result['MLE'].values - beta_target)**2), np.sum((mle_approx_result['MLE'].values - beta[E])**2)])
     print("MLE (approx) coverage", np.mean(mle_approx_covered))
 
-    mle_sov_result = carving.mle_sov()
+    mle_sov_result = carving.mle_sov(nsov=config['nsample'], sig_level=sig_level)
     mle_sov_time = mle_sov_result['time'].iloc[0]
     mle_sov_ci = np.array(mle_sov_result[['lower_confidence', 'upper_confidence']])
     mle_sov_pval = np.array(mle_sov_result['pvalues'])
@@ -89,7 +89,7 @@ def run(config):
 
     # all IS
     n_sov = config['nsample']
-    allIS_result = carving.sampling_inference(n_sov=n_sov, seed=seed**2)
+    allIS_result = carving.sampling_inference(n_sov=n_sov, seed=seed**2, sig_level=sig_level)
     allIS_time = allIS_result['time'].iloc[0]
     allIS_ci = np.array(allIS_result[['lower confidence', 'upper confidence']])
     allIS_pval = np.array(allIS_result['pvalue'])
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     l = 0
     nrep = 200
     nsample = config['nsample']
-    for signal, seed in itertools.product([.3, .5, .7], np.arange(nrep)):
+    for signal, seed in itertools.product([1.2], np.arange(nrep)):
         if l == args.jobid:
             print(signal, seed)
             config['seed'] = int(seed)
