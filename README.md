@@ -5,7 +5,7 @@ Code for conducting post-selection inference in the lasso problem.
 Liu, S. An Exact Sampler for Inference after Polyhedral Model Selection, 2023
 
 
-Installation:
+#### Installation:
 ```
 git clone https://github.com/liusf15/selinf_sampler.git
 ```
