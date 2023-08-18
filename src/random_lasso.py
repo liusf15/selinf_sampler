@@ -10,8 +10,6 @@ from collections import namedtuple
 from regreg.smooth.glm import glm
 from selectinf.algorithms import lasso
 from selectinf.randomized.lasso import split_lasso 
-from selectinf.randomized.lasso import lasso as rlasso
-from selectinf.randomized.randomization import randomization
 from selectinf.base import selected_targets, full_targets
 
 from src.core import sample_sov_reorder, Gibbs, joint_cdf_bivnormal, ci_bisection, st_cdf, sample_sov
@@ -57,6 +55,9 @@ class random_lasso():
         return Params(eta, theta_hat, cov_b, mu_b_added, mu_b_multi, var_theta, mu_theta_added, mu_theta_multi_b, mu_theta_multi_theta)
 
     def naive_inference(self, sig_level=0.05, beta=None):
+        """
+        Inference without correction
+        """
         sd = np.sqrt(np.diag(self.Lambda))
         q = ndtri(sig_level / 2)
         lower = self.beta_hat + q * sd
@@ -68,6 +69,9 @@ class random_lasso():
         return pvals, np.stack([lower, upper]).T
     
     def splitting_inference(self, sig_level=0.05, beta=None):
+        """
+        Inference using the remaining data only
+        """
         sd = np.sqrt(np.diag(self.Sigma_2))
         q = ndtri(sig_level / 2)
         lower = self.beta_hat_2 + q * sd
@@ -79,6 +83,11 @@ class random_lasso():
         return pvals, np.stack([lower, upper]).T
 
     def exact_bivar_pivot(self, j, params, theta, two_sided=True):
+        """
+        Method proposed by Panigrahi et al. 2022
+        Exact Selective Inference with Randomization
+        http://arxiv.org/abs/2212.12940
+        """
         d = self.d
         xi_obs = self.D @ self.beta_lasso
         theta_hat = params.theta_hat
@@ -109,6 +118,11 @@ class random_lasso():
         return cdf_
 
     def exact_bivar_interval(self, j, params, sig_level=0.05, two_sided=True):
+        """
+        Method proposed by Panigrahi et al. 2022
+        Exact Selective Inference with Randomization
+        http://arxiv.org/abs/2212.12940
+        """
         d = self.d
         xi_obs = self.D @ self.beta_lasso
         theta_hat = params.theta_hat
@@ -158,6 +172,9 @@ class random_lasso():
         return ci_bisection(_pvalue_, sd, splitting_right, splitting_left, sig_level=sig_level, tol=1e-6)
 
     def sample_auxillary(self, params, theta, method, seed, nsample, **gibbs_params):
+        """
+        helper function for sampling
+        """
         mean_b = params.mu_b_added + params.mu_b_multi * theta
         cov_b = params.cov_b
         L = np.linalg.cholesky(cov_b)
@@ -203,6 +220,9 @@ class random_lasso():
             return samples
     
     def get_pvalue_preint(self, params, theta, nsample=512, seed=1, two_sided=True, return_num_den=False):
+        """
+        compute p-values, pre-integrating the last coordinate
+        """
         c1 = -params.mu_theta_multi_b / np.sqrt(params.var_theta)
         c2 = (params.theta_hat - params.mu_theta_added - params.mu_theta_multi_theta * theta) / np.sqrt(params.var_theta)
         b_mean = params.mu_b_added + params.mu_b_multi * theta
@@ -216,6 +236,9 @@ class random_lasso():
         return cdf_
 
     def get_pvalue(self, params, theta, samples, weights=None, two_sided=True):
+        """
+        compute p-values given samples of b
+        """
         theta_cond_mean = params.mu_theta_added + params.mu_theta_multi_theta * theta + samples @ params.mu_theta_multi_b
         theta_cond_sd = np.sqrt(params.var_theta)
         if weights is None:
@@ -229,7 +252,7 @@ class random_lasso():
 
     def get_CI(self, params, samples, theta_sample, weights=None, sig_level=0.05, two_sided=True):
         """
-        samples are sampled with eta=eta, theta=theta_sample
+        construct intervals given samples of b
         """
         theta_cond_mean_ = params.mu_theta_added + samples @ params.mu_theta_multi_b
         var_theta = params.var_theta
@@ -256,7 +279,7 @@ class random_lasso():
 
     def get_pvalue_eta0(self, params, theta, samples, weights, two_sided=True):
         """
-        samples are sampled with eta=0
+        get p-values based on samples of b, which are sampled from N(\bar\mu, \bar\Sigma)|_O, need additional importance weighting
         """
         nu = params.var_theta / params.mu_theta_multi_theta
         theta_hat = params.theta_hat
@@ -279,7 +302,7 @@ class random_lasso():
 
     def get_CI_eta0(self, params, samples, weights, sig_level=0.05, two_sided=True):
         """
-        samples are sampled with eta=0
+        construct intervals based on samples of b, which are sampled from N(\bar\mu, \bar\Sigma)|_O, need additional importance weighting
         """
         theta_hat = params.theta_hat
         var_theta = params.var_theta
@@ -309,6 +332,9 @@ class random_lasso():
         return ci_bisection(_pvalue_, sd, splitting_left, splitting_right, sig_level=sig_level, tol=1e-6)
         
     def sampling_inference(self, sig_level=0.05, two_sided=True, n_sov=512, seed=1, return_time=False):
+        """
+        compute p-values and confidence intervals for all the selected variables 
+        """
         start = time.time()
         params0 = self.prepare_eta(np.zeros(self.d))
         eta0_samples, eta0_weights = self.sample_auxillary(params0, 0., 'sov', nsample=n_sov, seed=seed)
@@ -327,6 +353,9 @@ class random_lasso():
         return res
 
     def sel_loglik(self, beta_E, return_grad=False, return_hess=False, nsov=512, seed=1):
+        """
+        log-likelihood of the selective likelihood
+        """
         beta_hat_prec = np.linalg.inv(self.Lambda)
         b_marginal_prec = (1 - self.rho1) * self.H
         b_marginal_cov = self.H_inv / (1 - self.rho1)
@@ -354,6 +383,9 @@ class random_lasso():
         return res
         
     def mle_sov(self, nsov=512, seed=1, sig_level=0.05, verbose=False, return_time=False):
+        """
+        selective MLE-based inference
+        """
         beta_E = np.copy(self.beta_hat)
         lr = 0.01
         maxit = 10000
