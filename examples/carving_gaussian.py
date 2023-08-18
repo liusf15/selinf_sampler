@@ -65,7 +65,7 @@ def run(config):
     mle_approx_mse = np.array([np.sum((mle_approx_result['MLE'].values - beta_target)**2), np.sum((mle_approx_result['MLE'].values - beta[E])**2)])
     print("MLE (approx) coverage", np.mean(mle_approx_covered))
 
-    mle_sov_result = carving.mle_sov(nsov=config['nsample'], sig_level=sig_level)
+    mle_sov_result = carving.mle_sov(nsov=config['nsample'], sig_level=sig_level, return_time=True)
     mle_sov_time = mle_sov_result['time'].iloc[0]
     mle_sov_ci = np.array(mle_sov_result[['lower_confidence', 'upper_confidence']])
     mle_sov_pval = np.array(mle_sov_result['pvalues'])
@@ -89,9 +89,9 @@ def run(config):
 
     # all IS
     n_sov = config['nsample']
-    allIS_result = carving.sampling_inference(n_sov=n_sov, seed=seed**2, sig_level=sig_level)
+    allIS_result = carving.sampling_inference(n_sov=n_sov, seed=seed**2, sig_level=sig_level, return_time=True)
     allIS_time = allIS_result['time'].iloc[0]
-    allIS_ci = np.array(allIS_result[['lower confidence', 'upper confidence']])
+    allIS_ci = np.array(allIS_result[['lower_confidence', 'upper_confidence']])
     allIS_pval = np.array(allIS_result['pvalue'])
     allIS_covered = (beta_target <= allIS_ci[:, 1]) * (beta_target >= allIS_ci[:, 0])
     print('allIS coverage', np.mean(allIS_covered))
