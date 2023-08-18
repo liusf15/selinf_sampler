@@ -38,7 +38,10 @@ class random_lasso():
         theta_hat = np.dot(eta, self.beta_hat)
         beta_perp = self.beta_hat - c * theta_hat
         HDc = self.H @ Dc
-        var_theta = 1 / (1 / nu + np.dot(Dc, HDc))
+        if nu > 0:
+            var_theta = 1 / (1 / nu + np.dot(Dc, HDc))
+        else:
+            var_theta = 0
         cov_b_inv = self.H - var_theta * np.outer(HDc, HDc)
         cov_b = np.linalg.inv(cov_b_inv)
         r = self.r_ + self.Q_1_ @ beta_perp
@@ -46,9 +49,10 @@ class random_lasso():
         mu_b_added = cov_b @ (-Kr + var_theta * np.outer(HDc, Dc) @ Kr)
         if nu > 0:
             mu_b_multi = var_theta / nu * cov_b @ HDc
+            mu_theta_multi_theta = var_theta / nu
         else:
             mu_b_multi = np.zeros(self.d)
-        mu_theta_multi_theta = var_theta / nu
+            mu_theta_multi_theta = 0
         mu_theta_multi_b = var_theta * HDc
         mu_theta_added = var_theta * np.dot(Dc, Kr)
         return Params(eta, theta_hat, cov_b, mu_b_added, mu_b_multi, var_theta, mu_theta_added, mu_theta_multi_b, mu_theta_multi_theta)
@@ -306,7 +310,7 @@ class random_lasso():
             
         return ci_bisection(_pvalue_, sd, splitting_left, splitting_right, sig_level=sig_level, tol=1e-6)
         
-    def sampling_inference(self, sig_level=0.05, two_sided=True, n_sov=512, seed=1):
+    def sampling_inference(self, sig_level=0.05, two_sided=True, n_sov=512, seed=1, return_time=False):
         start = time.time()
         params0 = self.prepare_eta(np.zeros(self.d))
         eta0_samples, eta0_weights = self.sample_auxillary(params0, 0., 'sov', nsample=n_sov, seed=seed)
@@ -318,9 +322,10 @@ class random_lasso():
             pval[j] = self.get_pvalue_eta0(params, 0., eta0_samples, eta0_weights, two_sided=two_sided)
             ci[j] = self.get_CI_eta0(params, eta0_samples, eta0_weights, sig_level=sig_level, two_sided=two_sided)
         end = time.time()
-        res = pd.DataFrame(ci, columns=['lower confidence', 'upper confidence'])
+        res = pd.DataFrame(ci, columns=['lower_confidence', 'upper_confidence'])
         res['pvalue'] = pval
-        res['time'] = end - start
+        if return_time:
+            res['time'] = end - start
         return res
 
     def get_pvalue_upper(self, params, theta, two_sided=True):
@@ -513,7 +518,7 @@ class random_lasso():
             res['hess'] = H_0 - H_1
         return res
         
-    def mle_sov(self, nsov=512, seed=1, sig_level=0.05):
+    def mle_sov(self, nsov=512, seed=1, sig_level=0.05, verbose=False, return_time=False):
         beta_E = np.copy(self.beta_hat)
         lr = 0.01
         maxit = 10000
@@ -527,15 +532,18 @@ class random_lasso():
             lls.append(tmp['loglik'])
             beta_E = beta_E - lr * grad
             if np.linalg.norm(lr * grad) <= 1e-4:
-                print("converged")
+                if verbose:
+                    print("converged")
                 break
             if (i+1) % 10 == 0:
-                print(i+1, lls[-1])
+                if verbose:
+                    print(i+1, lls[-1])
                 if (lls[-1] - np.mean(lls[-10:-1])) / np.mean(lls[-10:-1]) < 0.01:
-                    print("converged")
+                    if verbose:
+                        print("converged")
                     break
         if i == maxit - 1:
-            print("failed to converge")
+            print("warning: did not converge")
         beta_mle = beta_E
         mle_cov = inv(-self.sel_loglik(beta_mle, return_grad=True, return_hess=True, nsov=nsov, seed=seed)['hess'])
         sds = np.sqrt(np.diag(mle_cov))
@@ -544,10 +552,11 @@ class random_lasso():
         end = time.time()
         res = pd.DataFrame(np.vstack([beta_mle, lower, upper]).T, columns=['MLE', 'lower_confidence', 'upper_confidence'])
         res['pvalues'] = 2 * norm.cdf(-np.abs(beta_mle) / sds)
-        res['time'] = end - start
+        if return_time:
+            res['time'] = end - start
         return res
 
-class gaussian_carving(random_lasso):
+class linear_carving(random_lasso):
     def __init__(self, X, Y, n1) -> None:
         super().__init__(X, Y)
         self.X_1 = X[:n1]

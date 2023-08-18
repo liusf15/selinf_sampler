@@ -160,24 +160,36 @@ if __name__ == "__main__":
     parser.add_argument('--cov_x', type=str, default='AR1')
     parser.add_argument('--target_d', type=int, default=10)
     parser.add_argument('--tune_lambda', type=str, default='cv_min')
+    parser.add_argument('--vary', type=str, default='signal')
     args = parser.parse_args()
     with open(args.config) as f:
         config = yaml.safe_load(f.read())
     config.update(vars(args))
+    nrep = 200
 
     l = 0
-    nrep = 200
-    nsample = config['nsample']
-    for signal, seed in itertools.product([1.2], np.arange(nrep)):
-        if l == args.jobid:
-            print(signal, seed)
-            config['seed'] = int(seed)
-            config['signal'] = signal
-            break
-        l = l + 1
+    if args.vary == 'signa':
+        nsample = config['nsample']
+        for signal, seed in itertools.product([0.3, 0.5, 0.7], np.arange(nrep)):
+            if l == args.jobid:
+                print(signal, seed)
+                config['seed'] = int(seed)
+                config['signal'] = signal
+                break
+            l = l + 1
+    else:
+        config['signal'] = 0.7
+        for m, seed in itertools.product(np.arange(9, 12), np.arange(nrep)):
+            if l == args.jobid:
+                nsample = 2**m
+                print(nsample, seed)
+                config['seed'] = int(seed)
+                config['nsample'] = nsample
+                break
+            l = l + 1
     
     path = os.path.join(config['rootdir'], args.date)
-    filename = f'carving_gaussian_{config["tune_lambda"]}_{config["n"]}_{config["rho1"]}_{config["p"]}_s_{config["s"]}_{config["cov_x"]}_rho_{config["rho"]}_nsample_{nsample}_signalfac_{signal}'
+    filename = f'carving_gaussian_{config["tune_lambda"]}_{config["n"]}_{config["rho1"]}_{config["p"]}_s_{config["s"]}_{config["cov_x"]}_rho_{config["rho"]}_nsample_{nsample}_signalfac_{config["signal"]}'
     path = os.path.join(path, filename)
     os.makedirs(path, exist_ok=True)
 

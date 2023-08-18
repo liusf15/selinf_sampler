@@ -61,7 +61,9 @@ def sample_sov_reorder(mean, L, nsample, seed):
     # reorder variables
     d = len(mean)
     b = np.ones(d) * np.Inf
-    ordering, _, a_ord, b_ord, L_ord = gibson_ordering(L @ L.T, np.copy(-mean), np.copy(b))  
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        ordering, _, a_ord, b_ord, L_ord = gibson_ordering(L @ L.T, np.copy(-mean), np.copy(b))  
     shift = np.zeros(d)
 
     samples_ord, weights = sample_sov(a_ord, b_ord, L_ord, nsample, seed, shift=shift)
