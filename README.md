@@ -2,7 +2,7 @@
 
 Code for conducting post-selection inference in the lasso problem.
 
-Liu, S. An Exact Sampler for Inference after Polyhedral Model Selection, 2023
+Sifan Liu. [An Exact Sampler for Inference after Polyhedral Model Selection](https://arxiv.org/abs/2308.10346), 2023
 
 
 #### Installation:
