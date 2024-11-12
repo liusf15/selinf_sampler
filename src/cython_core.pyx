@@ -53,6 +53,10 @@ def sample_sov(np.ndarray[DTYPE_float_t, ndim=1] a,
 
     seed: random seed
 
+    spherical: boolean, return x if true; else return Lx
+
+    rqmc: boolean, use RQMC or not
+
     shift: default is None (i.e. no shift); if not none, g(x_i) is replaced by g(x_i - shift[i])
 
     Return
